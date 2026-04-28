@@ -18,10 +18,16 @@ pipeline {
 
         stage('Login to AWS ECR') {
             steps {
-                sh '''
-                aws ecr get-login-password --region $AWS_REGION | \
-                docker login --username AWS --password-stdin $ECR_BASE
-                '''
+                withCredentials([[
+                    $class: 'AmazonWebServicesCredentialsBinding',
+                    credentialsId: 'aws-credentials'
+                ]]) {
+                    sh '''
+                    echo "Logging into AWS ECR..."
+                    aws ecr get-login-password --region $AWS_REGION | \
+                    docker login --username AWS --password-stdin $ECR_BASE
+                    '''
+                }
             }
         }
 
@@ -43,14 +49,16 @@ pipeline {
                         def fullImage = "${ECR_BASE}/${imageName}:${IMAGE_TAG}"
 
                         sh """
+                        echo "=============================="
                         echo "Building ${service.name}..."
-                        docker build -t ${service.name} ${service.path}
+                        docker build -t ${service.name}:${IMAGE_TAG} ${service.path}
 
                         echo "Tagging ${service.name}..."
                         docker tag ${service.name}:${IMAGE_TAG} ${fullImage}
 
                         echo "Pushing ${service.name}..."
                         docker push ${fullImage}
+                        echo "=============================="
                         """
                     }
                 }
@@ -63,7 +71,7 @@ pipeline {
             echo '✅ All services built and pushed to ECR successfully!'
         }
         failure {
-            echo '❌ Build failed. Check logs.'
+            echo '❌ Build failed. Check logs carefully.'
         }
     }
 }
